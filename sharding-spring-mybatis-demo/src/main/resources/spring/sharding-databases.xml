@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:context="http://www.springframework.org/schema/context" 
+    xmlns:tx="http://www.springframework.org/schema/tx" 
+    xmlns:sharding="http://shardingsphere.io/schema/shardingsphere/sharding"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+                        http://www.springframework.org/schema/beans/spring-beans.xsd 
+                        http://www.springframework.org/schema/tx 
+                        http://www.springframework.org/schema/tx/spring-tx.xsd
+                        http://www.springframework.org/schema/context 
+                        http://www.springframework.org/schema/context/spring-context.xsd
+                        http://shardingsphere.io/schema/shardingsphere/sharding 
+                        http://shardingsphere.io/schema/shardingsphere/sharding/sharding.xsd">
+                        
+	<context:property-placeholder location="classpath:properties/database.properties" /><!-- 加载配置文件 -->  
+	
+    <!-- <context:component-scan base-package="com.sharding.demo" /> -->
+    
+    <!-- 配置数据来源 一 -->
+    <bean id="separate_entity_0" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="driverClassName" value="com.mysql.jdbc.Driver"/>
+        <property name="url" value="${sharding.jdbc.datasource.separate_entity_0.url}"/>
+        <property name="username" value="${sharding.jdbc.datasource.separate_entity_0.username}"/>
+        <property name="password" value="${sharding.jdbc.datasource.separate_entity_0.password}"/>
+    </bean>
+    <!-- 配置数据来源 二 -->
+    <bean id="separate_entity_1" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="driverClassName" value="com.mysql.jdbc.Driver"/>
+        <property name="url" value="${sharding.jdbc.datasource.separate_entity_1.url}"/>
+        <property name="username" value="${sharding.jdbc.datasource.separate_entity_1.username}"/>
+        <property name="password" value="${sharding.jdbc.datasource.separate_entity_1.password}"/>
+    </bean>
+	
+	<!-- 可能不同的业务表有不同的业务规则，会出现好多个分库，分表策略-->
+    <bean id="preciseModuloDatabaseShardingAlgorithm" class="com.sharding.demo.algorithm.DatabaseShardingAlgorithm" />
+    <bean id="preciseModuloTableShardingAlgorithm" class="com.sharding.demo.algorithm.TableShardingAlgorithm" />
+    
+    <!-- 可能不同的业务表有不同的业务规则，会出现好多个分库，分表策略，这块指定了-->
+    <sharding:standard-strategy id="databaseShardingStrategy" sharding-column="user_id" precise-algorithm-ref="preciseModuloDatabaseShardingAlgorithm" />
+    <sharding:standard-strategy id="tableShardingStrategy" sharding-column="order_id" precise-algorithm-ref="preciseModuloTableShardingAlgorithm" />
+    
+    <sharding:data-source id="shardingDataSource">
+        <sharding:sharding-rule data-source-names="separate_entity_0,separate_entity_1">
+            <sharding:table-rules>
+                <sharding:table-rule logic-table="t_order" 
+                	actual-data-nodes="${sharding.jdbc.datasource.actual.data.nodes.order}"
+                	 database-strategy-ref="databaseShardingStrategy" table-strategy-ref="tableShardingStrategy"
+                	  generate-key-column-name="order_id" />
+                	  
+                <sharding:table-rule logic-table="t_order_item" 
+                	actual-data-nodes="${sharding.jdbc.datasource.actual.data.nodes.orderitem}" 
+                	database-strategy-ref="databaseShardingStrategy" 
+                	table-strategy-ref="tableShardingStrategy" 
+                	generate-key-column-name="order_item_id" />
+            </sharding:table-rules>
+        </sharding:sharding-rule>
+    </sharding:data-source>
+    
+    <!-- 事务配置 -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="shardingDataSource" />
+    </bean>
+    <tx:annotation-driven />
+    
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="shardingDataSource"/>
+        <property name="mapperLocations" value="classpath:mapper/*.xml"/>
+    </bean>
+    
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.sharding.demo"/>
+        <property name="sqlSessionFactoryBeanName" value="sqlSessionFactory"/>
+    </bean>
+    
+</beans>
